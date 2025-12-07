@@ -93,7 +93,7 @@ Shader "Milo/MDMXLink/Standard"
             float strobeA     = SampleDMX(chA + 3);
             
             float brightnessB = SampleDMX(chB - 1); 
-            float strobeB     = SampleDMX(chB + 3); // + 3 for 
+            float strobeB     = SampleDMX(chB + 3); // + 3 for the strobe i think
 
             float3 colA =  ReadFixtureRGB(chA) * brightnessA * getStrobe(strobeA);
             float3 colB =  ReadFixtureRGB(chB) * brightnessB * getStrobe(strobeB);
