@@ -2,7 +2,7 @@ Shader "Milo/MDMXLink/Standard"
 {
     Properties
     {
-        _Channel      ("Start DMX Channel", Float) = 1352 // tilt bars ok
+        _Channel ("Start DMX Channel", Float) = 1352 // tilt bars ok
         _FixtureCount ("Fixture Count", Float) = 4
         _Albedo ("Albedo Map", 2D) = "white" {}
         _Normal ("Normal Map", 2D) = "white" {}
