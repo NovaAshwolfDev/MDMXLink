@@ -25,22 +25,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+
       - name: Get Repo Owner
         id: getRepoOwner
-        #run: echo prop=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]') >> $GITHUB_OUTPUT #grab the repo owner and make it lowercase
-        run: echo prop=$(echo '${{ env.overrideOwnerString }}' | tr '[:upper:]' '[:lower:]') >> $GITHUB_OUTPUT #grab the repo owner and make it lowercase
+        run: echo prop=$(echo '${{ env.overrideOwnerString }}' | tr '[:upper:]' '[:lower:]') >> $GITHUB_OUTPUT
+
       - name: Set Matrix
         id: generateMatrix
-        #Multiline string for dumb reasons
         run: |
           TEMP=""
-          for package in $(find Packages -maxdepth 1 -mindepth 1 -type d -name "${{ env.packagePrefix }}.${{ steps.getRepoOwner.outputs.prop }}*"); do
+          # scan ROOT directory instead of Packages/
+          for package in $(find . -maxdepth 1 -mindepth 1 -type d -name "${{ env.packagePrefix }}.${{ steps.getRepoOwner.outputs.prop }}*"); do
             packageID=${package##*/}
             TEMP="$TEMP\"$packageID\", "
           done
           TEMP=${TEMP::-2}
-          TEMP="$TEMP"
           echo "matrix=[$TEMP]" >> $GITHUB_OUTPUT
+
       - name: Output Matrix
         run: echo ${{ steps.generateMatrix.outputs.matrix }}
 
@@ -52,8 +53,8 @@ jobs:
       matrix:
         packageID: ${{ fromJSON(needs.generateMatrix.outputs.matrix) }}
     env:
-      ACTIONS_RUNNER_DEBUG: false #This prevents set-output warnings for now
-      #TODO: Remove this once all actions are updated to use the new output format
+      ACTIONS_RUNNER_DEBUG: false 
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -62,14 +63,14 @@ jobs:
         id: version
         uses: notiz-dev/github-action-json-property@v0.2.0
         with: 
-            path: "Packages/${{matrix.packageID}}/package.json"
+            path: "${{ matrix.packageID }}/package.json"
             prop_path: "version"
       
       - name: get name
         id: name
         uses: notiz-dev/github-action-json-property@v0.2.0
         with: 
-            path: "Packages/${{matrix.packageID}}/package.json"
+            path: "${{ matrix.packageID }}/package.json"
             prop_path: "displayName"
       
       - name: sanitize name
@@ -89,7 +90,7 @@ jobs:
       - name: Set Environment Variables
         if: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
         run: |
-          echo "zipFile=${{ matrix.packageID }}-${{ steps.tag.outputs.prop }}".zip >> $GITHUB_ENV
+          echo "zipFile=${{ matrix.packageID }}-${{ steps.tag.outputs.prop }}.zip" >> $GITHUB_ENV
           echo "unityPackage=${{ matrix.packageID }}-${{ steps.tag.outputs.prop }}.unitypackage" >> $GITHUB_ENV
         
       - name: Create Zip
@@ -97,10 +98,10 @@ jobs:
         uses: thedoctor0/zip-release@09336613be18a8208dfa66bd57efafd9e2685657
         with:
           type: "zip"
-          directory: "Packages/${{matrix.packageID}}/"
-          filename: "../../${{env.zipFile}}" # make the zip file two directories up, since we start two directories in above
-          
-      - run: find "Packages/${{matrix.packageID}}/" -name \*.meta >> metaList
+          directory: "${{ matrix.packageID }}/"
+          filename: "../${{ env.zipFile }}"
+
+      - run: find "${{matrix.packageID}}/" -name \*.meta >> metaList
         if: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
           
       - name: Create UnityPackage
@@ -125,12 +126,11 @@ jobs:
           files: |
             ${{ env.zipFile }}
             ${{ env.unityPackage }}
-            Packages/${{ matrix.packageID }}/package.json
+            ${{ matrix.packageID }}/package.json
           body: |
             ${{ steps.ReleaseTemplateContents.outputs.content }}
           prerelease: true
       
-      # Output for matrices workaround
       - name: Build Status
         uses: cloudposse/github-action-matrix-outputs-write@v1
         with:
@@ -143,7 +143,7 @@ jobs:
             releaseCandidateCreated: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
     
   summary:
-    name: Final #This name is weird because it is put into the summary, so calling it summary would just mean github would show summary twice
+    name: Final
     needs: [build, generateMatrix]
     runs-on: ubuntu-latest
     steps:
@@ -156,32 +156,19 @@ jobs:
         with:
           matrix-step-name: build
 
-        #loop through the matrix outputs and add them to the summary
-        #object
-        # name
-        #  package1
-        #  package2
-        # version
-        #  package1
-        #  package2
       - name: Create Build Results
         run: |
           echo "Build Results:" >> $GITHUB_STEP_SUMMARY
           echo "Dry Run: ${{ github.event.inputs.dryRun }}" >> $GITHUB_STEP_SUMMARY
           buildResults='${{ steps.matrixOutputs.outputs.result }}'
-          # Loop through the package IDs from the `generateMatrix` job output
           for packageID in ${{ needs.generateMatrix.outputs.matrix }}; do
-              # Clean up the package ID by removing brackets, spaces, and quotes
               cleanID=$(echo "${packageID}" | tr -d '[] ,"')
-              # Get the name, version, tag, and release candidate state for the current package ID
               name=$(echo "${buildResults}" | jq --arg cleanID "${cleanID}" '.name[$cleanID]' | tr -d '"')
               version=$(echo "${buildResults}" | jq --arg cleanID "${cleanID}" '.version[$cleanID]' | tr -d '"')
               tag=$(echo "${buildResults}" | jq --arg cleanID "${cleanID}" '.tag[$cleanID]' | tr -d '"')
               rcCreated=$(echo "${buildResults}" | jq --arg cleanID "${cleanID}" '.releaseCandidateCreated[$cleanID]' | tr -d '"')
-              # Append the package details to the summary file
               echo "- ${name}" >> $GITHUB_STEP_SUMMARY
               echo "  - Package ID: \`${cleanID}\`" >> $GITHUB_STEP_SUMMARY
               echo "  - Version: \`${version}\`" >> $GITHUB_STEP_SUMMARY
               echo "  - Tag: \`${tag}\`" >> $GITHUB_STEP_SUMMARY
               echo "  - Release Candidate Created: \`${rcCreated}\`" >> $GITHUB_STEP_SUMMARY
-          done
