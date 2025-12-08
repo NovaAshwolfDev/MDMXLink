@@ -1,15 +1,4 @@
-import {
-  baseLayerLuminance,
-  fillColor,
-  neutralLayer1,
-  neutralLayer2,
-  neutralLayer3,
-  neutralLayer4,
-  neutralForegroundRest,
-  neutralStrokeRest,
-  controlFillColor,
-  controlStrokeColor
-} from "https://unpkg.com/@fluentui/web-components";
+import { baseLayerLuminance, StandardLuminance } from 'https://unpkg.com/@fluentui/web-components';
 
 const LISTING_URL = "{{ listingInfo.Url }}";
 
@@ -40,25 +29,14 @@ const PACKAGES = {
 {{~ end ~}}
 };
 
-const applyCustomDarkTheme = () => {
-  const root = document.documentElement;
-
-  baseLayerLuminance.setValueFor(root, 0.15);
-  fillColor.setValueFor(root, "#2a2a2a");             
-  controlFillColor.setValueFor(root, "#2a2a2a");      
-  controlStrokeColor.setValueFor(root, "#555");       
-  neutralForegroundRest.setValueFor(root, "#ffffff"); 
-
-  neutralLayer1.setValueFor(root, "#222222"); 
-  neutralLayer2.setValueFor(root, "#2a2a2a"); 
-  neutralLayer3.setValueFor(root, "#333333"); 
-  neutralLayer4.setValueFor(root, "#383838"); 
-  neutralStrokeRest.setValueFor(root, "#444");
-};
-
 const setTheme = () => {
-  applyCustomDarkTheme();
-};
+  const isDarkTheme = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
+  if (isDarkTheme()) {
+    baseLayerLuminance.setValueFor(document.documentElement, StandardLuminance.DarkMode);
+  } else {
+    baseLayerLuminance.setValueFor(document.documentElement, StandardLuminance.LightMode);
+  }
+}
 
 (() => {
   setTheme();
