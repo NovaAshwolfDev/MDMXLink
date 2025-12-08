@@ -1,9 +1,11 @@
 :root {
-  color-scheme: light dark;
+  color: black;
+  background: black;
 }
 
 * {
   box-sizing: border-box;
+  color: white;
 }
 
 body {
@@ -15,7 +17,7 @@ body {
   align-items: center;
   justify-content: center;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: 0;
+   color: black;
 }
 
 .hidden {
