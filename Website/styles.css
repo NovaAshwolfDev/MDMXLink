@@ -1,11 +1,9 @@
 :root {
-  color: black;
-  background: black;
+  color-scheme: light dark;
 }
 
 * {
   box-sizing: border-box;
-  /* color: white; */
 }
 
 body {
@@ -17,7 +15,6 @@ body {
   align-items: center;
   justify-content: center;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-   color: black;
 }
 
 .hidden {
@@ -355,23 +352,4 @@ h1 {
 
 .flex-1 {
   flex: 1;
-}
-
-fluent-text-field,
-fluent-text-area {
-  --fill-color: #444444;        /* background inside the box */
-  --control-fill-color: #444444;
-  --control-active-fill-color: #555555;
-  --control-hover-fill-color: #555555;
-
-  --color: white;               /* text colour */
-  --neutral-foreground-rest: white;
-
-  --border-color: #777;         /* outline */
-  --control-stroke-color: #777;
-  --control-active-stroke-color: #aaa;
-  --control-hover-stroke-color: #aaa;
-
-  --placeholder-opacity: 1;
-  --placeholder-color: #cccccc;
 }

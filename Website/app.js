@@ -43,21 +43,17 @@ const PACKAGES = {
 const applyCustomDarkTheme = () => {
   const root = document.documentElement;
 
-  // Dark mode luminance
   baseLayerLuminance.setValueFor(root, 0.15);
+  fillColor.setValueFor(root, "#2a2a2a");             
+  controlFillColor.setValueFor(root, "#2a2a2a");      
+  controlStrokeColor.setValueFor(root, "#555");       
+  neutralForegroundRest.setValueFor(root, "#ffffff"); 
 
-  // ---- INPUTS (fluent-text-field) ----
-  fillColor.setValueFor(root, "#2a2a2a");             // base fill
-  controlFillColor.setValueFor(root, "#2a2a2a");      // input BG
-  controlStrokeColor.setValueFor(root, "#555");       // input border
-  neutralForegroundRest.setValueFor(root, "#ffffff"); // text inside input
-
-  // ---- DATA GRID (fluent-data-grid) ----
-  neutralLayer1.setValueFor(root, "#222222"); // card background
-  neutralLayer2.setValueFor(root, "#2a2a2a"); // row background
-  neutralLayer3.setValueFor(root, "#333333"); // header background
-  neutralLayer4.setValueFor(root, "#383838"); // hover state
-  neutralStrokeRest.setValueFor(root, "#444"); // borders
+  neutralLayer1.setValueFor(root, "#222222"); 
+  neutralLayer2.setValueFor(root, "#2a2a2a"); 
+  neutralLayer3.setValueFor(root, "#333333"); 
+  neutralLayer4.setValueFor(root, "#383838"); 
+  neutralStrokeRest.setValueFor(root, "#444");
 };
 
 const setTheme = () => {
