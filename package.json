@@ -1,0 +1,14 @@
+{
+  "name": "gay.milo.mdmxlink",
+  "displayName": "MDMXLink",
+  "version": "1.0.0",
+  "unity": "2022.3",
+  "description": "Avatar Lighting using MDMX.",
+  "vpmDependencies": {
+    "com.vrchat.avatars": "3.4.x"
+  },
+  "author": {
+    "name": "Milo",
+    "url": "https://miloashwolf.gay"
+  }
+}

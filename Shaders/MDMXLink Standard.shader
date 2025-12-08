@@ -4,6 +4,7 @@ Shader "Milo/MDMXLink/Standard"
     {
         _Channel ("Start DMX Channel", Float) = 1352 // tilt bars ok
         _FixtureCount ("Fixture Count", Float) = 4
+        _FixtureType ("Fixture Type", Range(0, 2)) = 0
         _Albedo ("Albedo Map", 2D) = "white" {}
         _Normal ("Normal Map", 2D) = "white" {}
         _MaskMap  ("Mask Map", 2D) = "white" {}
@@ -20,12 +21,25 @@ Shader "Milo/MDMXLink/Standard"
         #pragma surface surf Standard fullforwardshadows vertex:vert
         #pragma target 3.0
         #include "UnityCG.cginc"
-        #define CHANNEL_SPACING 6 // 7 (never let me comment again)
+        float CHANNEL_SPACING = 6; // 7 (never let me comment again)
+        #define FIXTURE_TILTBAR 0
+        #define FIXTURE_SPOTLIGHT 1
+        #define FIXTURE_LASER2D 2
+
         sampler2D _Udon_MDMX, _Albedo, _Normal, _MaskMap;
         float4 _Udon_MDMX_TexelSize;
 
         float _Channel, _FixtureCount;
         float _Metallic, _Smoothness;
+        float _FixtureType;
+
+        struct MDMXFixtureMap {
+            int dimmer;
+            int strobe;
+            int red;
+            int green;
+            int blue;
+        };
 
         static const float2 DMXSize = float2(128.0, 128.0);
 
@@ -52,6 +66,39 @@ Shader "Milo/MDMXLink/Standard"
             float b = SampleDMX(baseCh + 2);
             return float3(r, g, b);
         }
+        void GetFixtureMap(int type, out MDMXFixtureMap map)
+        {
+            // gobo spotlight
+            if (type == 1)
+            {
+                map.dimmer = 5;
+                map.strobe = 6;
+                map.red    = 7;
+                map.green  = 8;
+                map.blue   = 9;
+                CHANNEL_SPACING = 13;
+                return;
+            }
+            // 2D laser
+            if (type == 2)
+            {
+                map.dimmer = 5;
+                map.strobe = 6;
+                map.red    = 7;
+                map.green  = 8;
+                map.blue   = 9;
+                CHANNEL_SPACING = 26;
+                return;
+            }
+            // fallback
+            map.dimmer = -1;
+            map.strobe = -1;
+            map.red    = -1;
+            map.green  = -1;
+            map.blue   = -1;
+        }
+
+
         float getStrobe(float strobeVal)
         {
             return strobeVal == 0 ? 1.0 : strobeVal;
@@ -89,16 +136,49 @@ Shader "Milo/MDMXLink/Standard"
             float chA = startCh + idxA * CHANNEL_SPACING;
             float chB = startCh + idxB * CHANNEL_SPACING;
 
-            float brightnessA = SampleDMX(chA - 1); // i almost forgot this sorry guys
-            float strobeA     = SampleDMX(chA + 3);
-            
-            float brightnessB = SampleDMX(chB - 1); 
-            float strobeB     = SampleDMX(chB + 3); // + 3 for the strobe i think
+            float3 colA;
+            float3 colB;
 
-            float3 colA =  ReadFixtureRGB(chA) * brightnessA * getStrobe(strobeA);
-            float3 colB =  ReadFixtureRGB(chB) * brightnessB * getStrobe(strobeB);
+            int fx = (int)_FixtureType;
+
+            if (fx == FIXTURE_TILTBAR)
+            {
+                float brightnessA = SampleDMX(chA - 1); // i almost forgot this sorry guys
+                float strobeA     = SampleDMX(chA + 3);
+
+                float brightnessB = SampleDMX(chB - 1); 
+                float strobeB     = SampleDMX(chB + 3); // + 3 for the strobe i think
+
+                colA = ReadFixtureRGB(chA) * brightnessA * getStrobe(strobeA);
+                colB = ReadFixtureRGB(chB) * brightnessB * getStrobe(strobeB);
+            }
+            else
+            {
+                MDMXFixtureMap m;
+                GetFixtureMap(fx, m);
+
+                float dimA    = SampleDMX(chA + m.dimmer);
+                float strobeA = SampleDMX(chA + m.strobe);
+                float3 rgbA = float3(
+                    SampleDMX(chA + m.red),
+                    SampleDMX(chA + m.green),
+                    SampleDMX(chA + m.blue)
+                );
+
+                float dimB    = SampleDMX(chB + m.dimmer);
+                float strobeB = SampleDMX(chB + m.strobe);
+                float3 rgbB = float3(
+                    SampleDMX(chB + m.red),
+                    SampleDMX(chB + m.green),
+                    SampleDMX(chB + m.blue)
+                );
+
+                colA = rgbA * dimA * getStrobe(strobeA);
+                colB = rgbB * dimB * getStrobe(strobeB);
+            }
 
             float3 finalColor = lerp(colA, colB, blend) * mask;
+
             o.Albedo = mainTex;
             o.Normal = UnpackNormal(normal);
             o.Emission = finalColor;
@@ -110,4 +190,5 @@ Shader "Milo/MDMXLink/Standard"
         ENDCG
     }
     FallBack "Diffuse"
+    CustomEditor "MDMXLinkGUI"
 }
