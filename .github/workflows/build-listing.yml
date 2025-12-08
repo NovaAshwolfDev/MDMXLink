@@ -79,9 +79,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Minify and copy data.json
-        run: jq -r tostring ./${{ env.listPublishDirectory }}/data-original.json > ./${{ env.listPublishDirectory }}/data.json
-
       - name: Setup Pages
         uses: actions/configure-pages@v3
 
