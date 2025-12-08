@@ -5,163 +5,92 @@ on:
     inputs:
       dryRun:
         type: boolean
-        description: 'Will Dry Run the workflow, skipping the release step, but showing you what would be released.'
+        description: 'Dry run without making release'
         required: false
-
-env:
-  releaseTemplate: "RELEASE TEMPLATE.md"
-  packagePrefix: "com"
-  overrideOwnerString: "mattshark"
 
 permissions:
   contents: write
 
+env:
+  releaseTemplate: "RELEASE TEMPLATE.md"
+  packagePath: "."
+  packageJson: "./package.json"
+
 jobs:
-  generateMatrix:
-    name: Generate Package Matrix
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.generateMatrix.outputs.matrix }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Get Repo Owner
-        id: getRepoOwner
-        run: echo prop=$(echo '${{ env.overrideOwnerString }}' | tr '[:upper:]' '[:lower:]') >> $GITHUB_OUTPUT
-      
-      - name: Set Matrix
-        id: generateMatrix
-        run: |
-          echo "matrix=[\"gay.milo.mdmxlink\"]" >> $GITHUB_OUTPUT
-          
-      - name: Output Matrix
-        run: echo ${{ steps.generateMatrix.outputs.matrix }}
-
   build:
-    name: Build ${{ matrix.packageID }}
-    needs: generateMatrix
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        packageID: ${{ fromJSON(needs.generateMatrix.outputs.matrix) }}
-    env:
-      ACTIONS_RUNNER_DEBUG: false 
-
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: get version
+      - name: Read version
         id: version
         uses: notiz-dev/github-action-json-property@v0.2.0
         with: 
-            path: "${{ matrix.packageID }}/package.json"
-            prop_path: "version"
+          path: "${{ env.packageJson }}"
+          prop_path: "version"
       
-      - name: get name
-        id: name
+      - name: Read display name
+        id: displayName
         uses: notiz-dev/github-action-json-property@v0.2.0
         with: 
-            path: "${{ matrix.packageID }}/package.json"
-            prop_path: "displayName"
-      
-      - name: sanitize name
-        id: sanitizeName
-        run: echo prop=$(echo '${{ steps.name.outputs.prop }}' | tr ' ' '_') >> $GITHUB_OUTPUT
-      
-      - name: generate tag
+          path: "${{ env.packageJson }}"
+          prop_path: "displayName"
+
+      - name: Sanitize name
+        id: cleanName
+        run: echo "value=$(echo '${{ steps.displayName.outputs.prop }}' | tr ' ' '_')" >> $GITHUB_OUTPUT
+
+      - name: Generate tag
         id: tag
-        run: echo prop="${{ steps.sanitizeName.outputs.prop }}-${{ steps.version.outputs.prop }}" >> $GITHUB_OUTPUT
-      
-      - name: Check if Release Tag Exists
-        id: checkReleaseTag
+        run: echo "value=${{ steps.cleanName.outputs.value }}-${{ steps.version.outputs.prop }}" >> $GITHUB_OUTPUT
+
+      - name: Check if tag exists
+        id: tagExists
         uses: mukunku/tag-exists-action@v1.2.0
         with:
-          tag: ${{ steps.tag.outputs.prop }}
+          tag: ${{ steps.tag.outputs.value }}
 
-      - name: Set Environment Variables
-        if: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
+      - name: Prepare filenames
+        if: ${{ steps.tagExists.outputs.exists == 'false' }}
         run: |
-          echo "zipFile=${{ matrix.packageID }}-${{ steps.tag.outputs.prop }}.zip" >> $GITHUB_ENV
-          echo "unityPackage=${{ matrix.packageID }}-${{ steps.tag.outputs.prop }}.unitypackage" >> $GITHUB_ENV
-        
-      - name: Create Zip
-        if: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
+          echo "zipFile=${{ steps.displayName.outputs.prop }}-${{ steps.version.outputs.prop }}.zip" >> $GITHUB_ENV
+          echo "unityPackage=${{ steps.displayName.outputs.prop }}-${{ steps.version.outputs.prop }}.unitypackage" >> $GITHUB_ENV
+
+      - name: Create ZIP
+        if: ${{ steps.tagExists.outputs.exists == 'false' }}
         uses: thedoctor0/zip-release@09336613be18a8208dfa66bd57efafd9e2685657
         with:
           type: "zip"
-          directory: "${{ matrix.packageID }}/"
-          filename: "../${{ env.zipFile }}"
+          directory: "."
+          filename: "${{ env.zipFile }}"
+          exclusions: ".git .github"
 
-      - run: find "${{matrix.packageID}}/" -name \*.meta >> metaList
-        if: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
-          
+      - name: Find meta files
+        if: ${{ steps.tagExists.outputs.exists == 'false' }}
+        run: find . -name '*.meta' > metaList
+
       - name: Create UnityPackage
-        if: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
+        if: ${{ steps.tagExists.outputs.exists == 'false' }}
         uses: pCYSl5EDgo/create-unitypackage@cfcd3cf0391a5ef1306342794866a9897c32af0b
         with:
           package-path: ${{ env.unityPackage }}
           include-files: metaList
-        
-      - name: Read Release Template
-        if: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
-        id: ReleaseTemplateContents
+
+      - name: Read release template
+        id: template
+        if: ${{ steps.tagExists.outputs.exists == 'false' }}
         uses: juliangruber/read-file-action@v1.1.6
         with:
-          path: "./${{ env.releaseTemplate }}"
-        
-      - name: Make Release
-        if: ${{ steps.checkReleaseTag.outputs.exists == 'false' && github.event.inputs.dryRun == 'false' }}
-        uses: softprops/action-gh-release@1e07f4398721186383de40550babbdf2b84acfc5
+          path: "${{ env.releaseTemplate }}"
+
+      - name: Create Release
+        if: ${{ steps.tagExists.outputs.exists == 'false' && github.event.inputs.dryRun != 'true' }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.tag.outputs.prop }}
+          tag_name: ${{ steps.tag.outputs.value }}
           files: |
             ${{ env.zipFile }}
             ${{ env.unityPackage }}
-            ${{ matrix.packageID }}/package.json
-          body: |
-            ${{ steps.ReleaseTemplateContents.outputs.content }}
-          prerelease: true
-      
-      - name: Build Status
-        uses: cloudposse/github-action-matrix-outputs-write@v1
-        with:
-          matrix-step-name: ${{ github.job }}
-          matrix-key: ${{ matrix.packageID }}
-          outputs: |-
-            name: ${{ steps.name.outputs.prop }}
-            version: ${{ steps.version.outputs.prop }}
-            tag: ${{ steps.tag.outputs.prop }}
-            releaseCandidateCreated: ${{ steps.checkReleaseTag.outputs.exists == 'false' }}
-    
-  summary:
-    name: Final
-    needs: [build, generateMatrix]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Read Build Matrix Outputs
-        uses: cloudposse/github-action-matrix-outputs-read@v1
-        id: matrixOutputs
-        with:
-          matrix-step-name: build
-
-      - name: Create Build Results
-        run: |
-          echo "Build Results:" >> $GITHUB_STEP_SUMMARY
-          echo "Dry Run: ${{ github.event.inputs.dryRun }}" >> $GITHUB_STEP_SUMMARY
-          buildResults='${{ steps.matrixOutputs.outputs.result }}'
-          for packageID in ${{ needs.generateMatrix.outputs.matrix }}; do
-              cleanID=$(echo "${packageID}" | tr -d '[] ,"')
-              name=$(echo "${buildResults}" | jq --arg cleanID "${cleanID}" '.name[$cleanID]' | tr -d '"')
-              version=$(echo "${buildResults}" | jq --arg cleanID "${cleanID}" '.version[$cleanID]' | tr -d '"')
-              tag=$(echo "${buildResults}" | jq --arg cleanID "${cleanID}" '.tag[$cleanID]' | tr -d '"')
-              rcCreated=$(echo "${buildResults}" | jq --arg cleanID "${cleanID}" '.releaseCandidateCreated[$cleanID]' | tr -d '"')
-              echo "- ${name}" >> $GITHUB_STEP_SUMMARY
-              echo "  - Package ID: \`${cleanID}\`" >> $GITHUB_STEP_SUMMARY
-              echo "  - Version: \`${version}\`" >> $GITHUB_STEP_SUMMARY
-              echo "  - Tag: \`${tag}\`" >> $GITHUB_STEP_SUMMARY
-              echo "  - Release Candidate Created: \`${rcCreated}\`" >> $GITHUB_STEP_SUMMARY
+            package.json
+          body: ${{ steps.template.outputs.content }}
