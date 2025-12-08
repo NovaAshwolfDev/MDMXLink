@@ -1,0 +1,95 @@
+name: Update Website
+
+env:
+  listPublishDirectory: Website
+  pathToCi: ci
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Build Release]
+    types:
+      - completed
+  release:
+    types: [published, edited, created, unpublished, deleted, released]
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  InitialSetup:
+    name: initial-setup
+    runs-on: ubuntu-latest
+    outputs:
+      releaseTags: ${{ steps.get_latest_release.outputs.data }}
+      latestTag: ${{ steps.get_latest_release.outputs.latest }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get all tags for upcoming matrix
+        id: get_latest_release
+        run: |
+          echo "DATA=[\"$(echo $(git tag --sort=-creatordate ) | sed 's/ /\", \"/g')\"]" >> "$GITHUB_OUTPUT"
+          echo "LATEST=$(echo $(git tag -l --sort=-creatordate | head -n 1 ))" >> "$GITHUB_OUTPUT"
+
+  FinalWebBuild:
+    needs: InitialSetup
+    name: final-web-build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v3
+        with:
+          repository: Happyrobot33/package-list-action
+          path: ${{ env.pathToCi }}
+          clean: false
+
+      - name: Restore Timestamps
+        uses: chetan/git-restore-mtime-action@v1
+
+      - name: Restore Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ${{ env.pathToCi }}/.nuke/temp
+            ~/.nuget/packages
+          key: ${{ runner.os }}-${{ hashFiles('**/global.json', '**/*.csproj') }}
+
+      - name: Build Package Version Listing
+        run: ${{ env.pathToCi }}/build.cmd BuildMultiPackageListing --root ${{ env.pathToCi }} --list-publish-directory $GITHUB_WORKSPACE/${{ env.listPublishDirectory }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Minify and copy data.json
+        run: jq -r tostring ./${{ env.listPublishDirectory }}/data-original.json > ./${{ env.listPublishDirectory }}/data.json
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.listPublishDirectory }}
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
