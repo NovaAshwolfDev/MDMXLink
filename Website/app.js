@@ -1,4 +1,15 @@
-import { baseLayerLuminance, StandardLuminance } from 'https://unpkg.com/@fluentui/web-components';
+import {
+  baseLayerLuminance,
+  fillColor,
+  neutralLayer1,
+  neutralLayer2,
+  neutralLayer3,
+  neutralLayer4,
+  neutralForegroundRest,
+  neutralStrokeRest,
+  controlFillColor,
+  controlStrokeColor
+} from "https://unpkg.com/@fluentui/web-components";
 
 const LISTING_URL = "{{ listingInfo.Url }}";
 
@@ -29,7 +40,37 @@ const PACKAGES = {
 {{~ end ~}}
 };
 
+const applyCustomDarkTheme = () => {
+  const root = document.documentElement;
+
+  // Dark mode luminance
+  baseLayerLuminance.setValueFor(root, 0.15);
+
+  // ---- INPUTS (fluent-text-field) ----
+  fillColor.setValueFor(root, "#2a2a2a");             // base fill
+  controlFillColor.setValueFor(root, "#2a2a2a");      // input BG
+  controlStrokeColor.setValueFor(root, "#555");       // input border
+  neutralForegroundRest.setValueFor(root, "#ffffff"); // text inside input
+
+  // ---- DATA GRID (fluent-data-grid) ----
+  neutralLayer1.setValueFor(root, "#222222"); // card background
+  neutralLayer2.setValueFor(root, "#2a2a2a"); // row background
+  neutralLayer3.setValueFor(root, "#333333"); // header background
+  neutralLayer4.setValueFor(root, "#383838"); // hover state
+  neutralStrokeRest.setValueFor(root, "#444"); // borders
+};
+
+const setTheme = () => {
+  applyCustomDarkTheme();
+};
+
 (() => {
+  setTheme();
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    setTheme();
+  });
+
   const packageGrid = document.getElementById('packageGrid');
 
   const searchInput = document.getElementById('searchInput');
