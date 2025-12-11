@@ -1,7 +1,7 @@
 {
   "name": "gay.milo.mdmxlink",
   "displayName": "MDMXLink",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "unity": "2022.3",
   "description": "Avatar Lighting using MDMX.",
   "vpmDependencies": {
