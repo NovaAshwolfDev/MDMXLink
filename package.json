@@ -5,7 +5,7 @@
   "unity": "2022.3",
   "description": "Avatar Lighting using MDMX.",
   "vpmDependencies": {
-    "com.vrchat.avatars": "3.4.x"
+    "com.vrchat.avatars": "3.8.x"
   },
   "author": {
     "name": "Milo",
