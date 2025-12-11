@@ -21,7 +21,6 @@ Shader "Milo/MDMXLink/Standard"
         #pragma surface surf Standard fullforwardshadows vertex:vert
         #pragma target 3.0
         #include "UnityCG.cginc"
-        float CHANNEL_SPACING = 6; // 7 (never let me comment again)
         #define FIXTURE_TILTBAR 0
         #define FIXTURE_SPOTLIGHT 1
         #define FIXTURE_LASER2D 2
@@ -76,7 +75,6 @@ Shader "Milo/MDMXLink/Standard"
                 map.red    = 7;
                 map.green  = 8;
                 map.blue   = 9;
-                CHANNEL_SPACING = 13;
                 return;
             }
             // 2D laser
@@ -87,7 +85,6 @@ Shader "Milo/MDMXLink/Standard"
                 map.red    = 7;
                 map.green  = 8;
                 map.blue   = 9;
-                CHANNEL_SPACING = 26;
                 return;
             }
             // fallback
@@ -96,6 +93,14 @@ Shader "Milo/MDMXLink/Standard"
             map.red    = -1;
             map.green  = -1;
             map.blue   = -1;
+        }
+
+        float GetChannelSpacing(int fx)
+        {
+            if (fx == FIXTURE_TILTBAR)   return 6; // 7 (never let me comment again please </3)
+            if (fx == FIXTURE_SPOTLIGHT) return 13;
+            if (fx == FIXTURE_LASER2D)   return 26;
+            return 6;
         }
 
 
@@ -107,7 +112,7 @@ Shader "Milo/MDMXLink/Standard"
         struct Input
         {
             float2 uv_Albedo;
-            float3 objPos : SV_POSITION; // for the gradient position
+            float3 objPos; // for the gradient position
         };
 
         void vert(inout appdata_full v, out Input o)
@@ -122,6 +127,7 @@ Shader "Milo/MDMXLink/Standard"
             float4 normal = tex2D(_Normal, IN.uv_Albedo);
             float mask = tex2D(_MaskMap, IN.uv_Albedo).r;
 
+            int fx = (int)_FixtureType;
             float startCh = round(_Channel);
             int count = max((int)_FixtureCount, 1);
 
@@ -133,13 +139,12 @@ Shader "Milo/MDMXLink/Standard"
 
             float blend = frac(fIdx);
 
-            float chA = startCh + idxA * CHANNEL_SPACING;
-            float chB = startCh + idxB * CHANNEL_SPACING;
+            float chA = startCh + idxA * GetChannelSpacing(fx);
+            float chB = startCh + idxB * GetChannelSpacing(fx);
 
             float3 colA;
             float3 colB;
 
-            int fx = (int)_FixtureType;
 
             if (fx == FIXTURE_TILTBAR)
             {
