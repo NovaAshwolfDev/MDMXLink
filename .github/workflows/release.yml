@@ -1,11 +1,11 @@
 name: Build Release
 
-on: 
+on:
   workflow_dispatch:
     inputs:
       dryRun:
         type: boolean
-        description: 'Dry run without making release'
+        description: Dry run without making release
         required: false
 
 permissions:
@@ -13,80 +13,95 @@ permissions:
 
 env:
   releaseTemplate: "RELEASE TEMPLATE.md"
-  packagePath: "."
   packageJson: "./package.json"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Read version
         id: version
-        uses: notiz-dev/github-action-json-property@v0.2.0
-        with: 
-          path: "${{ env.packageJson }}"
-          prop_path: "version"
-      
+        run: echo "value=$(jq -r '.version' '${{ env.packageJson }}')" >> $GITHUB_OUTPUT
+
       - name: Read display name
         id: displayName
-        uses: notiz-dev/github-action-json-property@v0.2.0
-        with: 
-          path: "${{ env.packageJson }}"
-          prop_path: "displayName"
+        run: echo "value=$(jq -r '.displayName' '${{ env.packageJson }}')" >> $GITHUB_OUTPUT
 
       - name: Sanitize name
         id: cleanName
-        run: echo "value=$(echo '${{ steps.displayName.outputs.prop }}' | tr ' ' '_')" >> $GITHUB_OUTPUT
+        run: echo "value=$(echo '${{ steps.displayName.outputs.value }}' | tr ' ' '_')" >> $GITHUB_OUTPUT
 
       - name: Generate tag
         id: tag
-        run: echo "value=${{ steps.cleanName.outputs.value }}-${{ steps.version.outputs.prop }}" >> $GITHUB_OUTPUT
+        run: echo "value=${{ steps.cleanName.outputs.value }}-${{ steps.version.outputs.value }}" >> $GITHUB_OUTPUT
 
       - name: Check if tag exists
         id: tagExists
-        uses: mukunku/tag-exists-action@v1.2.0
+        uses: mukunku/tag-exists-action@v1.7.0
         with:
           tag: ${{ steps.tag.outputs.value }}
 
       - name: Prepare filenames
         if: ${{ steps.tagExists.outputs.exists == 'false' }}
         run: |
-          echo "zipFile=${{ steps.displayName.outputs.prop }}-${{ steps.version.outputs.prop }}.zip" >> $GITHUB_ENV
-          echo "unityPackage=${{ steps.displayName.outputs.prop }}-${{ steps.version.outputs.prop }}.unitypackage" >> $GITHUB_ENV
+          echo "zipFile=${{ steps.displayName.outputs.value }}-${{ steps.version.outputs.value }}.zip" >> $GITHUB_ENV
+          echo "unityPackage=${{ steps.displayName.outputs.value }}-${{ steps.version.outputs.value }}.unitypackage" >> $GITHUB_ENV
 
       - name: Create ZIP
         if: ${{ steps.tagExists.outputs.exists == 'false' }}
-        uses: thedoctor0/zip-release@09336613be18a8208dfa66bd57efafd9e2685657
+        uses: thedoctor0/zip-release@master
         with:
-          type: "zip"
-          directory: "."
-          filename: "${{ env.zipFile }}"
-          exclusions: ".git .github"
+          type: zip
+          directory: .
+          filename: ${{ env.zipFile }}
+          exclusions: ".git .github *.unitypackage *.zip"
 
-      - name: Find meta files
+      - name: Build UnityPackage file list
         if: ${{ steps.tagExists.outputs.exists == 'false' }}
-        run: find . -name '*.meta' > metaList
+        run: |
+          rm -f fileList
+
+          find . -type f \
+            ! -path './.git/*' \
+            ! -path './.github/*' \
+            ! -name '*.zip' \
+            ! -name '*.unitypackage' \
+            ! -name 'fileList' \
+            ! -name 'metaList' \
+            > fileList
+
+          echo "=== fileList ==="
+          cat fileList
 
       - name: Create UnityPackage
         if: ${{ steps.tagExists.outputs.exists == 'false' }}
         uses: pCYSl5EDgo/create-unitypackage@cfcd3cf0391a5ef1306342794866a9897c32af0b
         with:
           package-path: ${{ env.unityPackage }}
-          include-files: metaList
+          include-files: fileList
+
+      - name: Check built files
+        if: ${{ steps.tagExists.outputs.exists == 'false' }}
+        run: |
+          echo "=== workspace files ==="
+          ls -lah
+          echo "=== unitypackage exists? ==="
+          test -f "${{ env.unityPackage }}" && echo "yes" || (echo "no" && exit 1)
 
       - name: Read release template
         id: template
         if: ${{ steps.tagExists.outputs.exists == 'false' }}
         uses: juliangruber/read-file-action@v1.1.6
         with:
-          path: "${{ env.releaseTemplate }}"
+          path: ${{ env.releaseTemplate }}
 
       - name: Create Release
         if: ${{ steps.tagExists.outputs.exists == 'false' && github.event.inputs.dryRun != 'true' }}
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.value }}
           files: |
