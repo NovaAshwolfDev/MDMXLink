@@ -69,7 +69,7 @@ jobs:
           echo "Tag already exists: ${{ steps.rel.outputs.tag }}"
           exit 1
 
-      - name: Create source ZIP for UPM users
+      - name: Create source ZIP for VCC users
         shell: bash
         run: |
           git archive \
@@ -82,81 +82,28 @@ jobs:
         run: |
           echo "=== repo root ==="
           ls -lah
-          echo "=== files (depth 3) ==="
-          find . -maxdepth 3 -type f | sort || true
-
-      - name: Debug Unity files
-        shell: bash
-        run: |
-          echo "=== all meta files ==="
-          find . -type f -name '*.meta' | sort || true
-          echo "=== Editor tree ==="
-          find ./Editor -maxdepth 5 -type f | sort || true
-          echo "=== Shaders tree ==="
-          find ./Shaders -maxdepth 5 -type f | sort || true
+          echo "=== files (depth 4) ==="
+          find . -maxdepth 4 -type f | sort || true
 
       - name: Build unitypackage meta list
         shell: bash
         run: |
+          set -e
+
           rm -f metaList
           touch metaList
 
-          # Required roots for the unitypackage
-          REQUIRED_ROOTS=(
-            "./Editor"
-            "./Shaders"
-          )
-
-          # Optional roots/files for the unitypackage
-          OPTIONAL_ROOTS=(
-            "./MDMX Default.mat"
-          )
-
-          add_path() {
-            local path="$1"
-            local required="$2"
-
-            if [ -d "$path" ]; then
-              local count
-              count=$(find "$path" -type f -name '*.meta' | tee -a metaList | wc -l)
-
-              if [ "$required" = "true" ] && [ "$count" -eq 0 ]; then
-                echo "Required folder has no .meta files: $path"
-                exit 1
-              fi
-
-            elif [ -f "$path.meta" ]; then
-              echo "$path.meta" >> metaList
-
-            elif [ -f "$path" ] && [[ "$path" == *.meta ]]; then
-              echo "$path" >> metaList
-
-            else
-              if [ "$required" = "true" ]; then
-                echo "Missing required package root or meta: $path"
-                exit 1
-              else
-                echo "Skipping missing optional path: $path"
-              fi
-            fi
-          }
-
-          for path in "${REQUIRED_ROOTS[@]}"; do
-            add_path "$path" true
-          done
-
-          for path in "${OPTIONAL_ROOTS[@]}"; do
-            add_path "$path" false
-          done
-
-          sort -u metaList -o metaList
+          find . -type f -name '*.meta' \
+            ! -path './.git/*' \
+            ! -path './.github/*' \
+            | sort -u > metaList
 
           echo "=== metaList ==="
           cat metaList || true
 
           if [ ! -s metaList ]; then
-            echo "metaList is empty. No Unity .meta files were found in the selected roots."
-            echo "Check whether your repo actually contains committed .meta files."
+            echo "No Unity .meta files were found in this repository."
+            echo "A .unitypackage cannot be created unless Unity asset .meta files are committed."
             exit 1
           fi
 
@@ -188,9 +135,9 @@ jobs:
               echo "content<<EOF"
               echo "Release ${{ steps.rel.outputs.tag }}"
               echo
-              echo "UPM package: \`${{ steps.pkg.outputs.name }}\`"
+              echo "VCC package: \`${{ steps.pkg.outputs.name }}\`"
               echo "Version: \`${{ steps.pkg.outputs.version }}\`"
-              echo "Includes both UPM source ZIP and legacy .unitypackage."
+              echo "Includes both VCC source ZIP and legacy .unitypackage."
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           fi
