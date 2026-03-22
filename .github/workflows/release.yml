@@ -5,15 +5,16 @@ on:
     inputs:
       dryRun:
         type: boolean
-        description: Dry run without making release
+        description: Dry run without creating GitHub release
         required: false
+        default: false
 
 permissions:
   contents: write
 
 env:
-  releaseTemplate: "RELEASE TEMPLATE.md"
-  packageJson: "./package.json"
+  PACKAGE_JSON: ./package.json
+  RELEASE_TEMPLATE: ./RELEASE TEMPLATE.md
 
 jobs:
   build:
@@ -22,90 +23,137 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Read version
-        id: version
-        run: echo "value=$(jq -r '.version' '${{ env.packageJson }}')" >> $GITHUB_OUTPUT
-
-      - name: Read display name
-        id: displayName
-        run: echo "value=$(jq -r '.displayName' '${{ env.packageJson }}')" >> $GITHUB_OUTPUT
-
-      - name: Sanitize name
-        id: cleanName
-        run: echo "value=$(echo '${{ steps.displayName.outputs.value }}' | tr ' ' '_')" >> $GITHUB_OUTPUT
-
-      - name: Generate tag
-        id: tag
-        run: echo "value=${{ steps.cleanName.outputs.value }}-${{ steps.version.outputs.value }}" >> $GITHUB_OUTPUT
-
-      - name: Check if tag exists
-        id: tagExists
-        uses: mukunku/tag-exists-action@v1.7.0
         with:
-          tag: ${{ steps.tag.outputs.value }}
+          fetch-depth: 0
 
-      - name: Prepare filenames
-        if: ${{ steps.tagExists.outputs.exists == 'false' }}
+      - name: Read package info
+        id: pkg
+        shell: bash
         run: |
-          echo "zipFile=${{ steps.displayName.outputs.value }}-${{ steps.version.outputs.value }}.zip" >> $GITHUB_ENV
-          echo "unityPackage=${{ steps.displayName.outputs.value }}-${{ steps.version.outputs.value }}.unitypackage" >> $GITHUB_ENV
+          VERSION="$(jq -r '.version' '${{ env.PACKAGE_JSON }}')"
+          NAME="$(jq -r '.name' '${{ env.PACKAGE_JSON }}')"
+          DISPLAY_NAME="$(jq -r '.displayName // .name' '${{ env.PACKAGE_JSON }}')"
+          SAFE_DISPLAY_NAME="$(echo "$DISPLAY_NAME" | tr ' ' '_' | tr -cd '[:alnum:]_.-')"
 
-      - name: Create ZIP
-        if: ${{ steps.tagExists.outputs.exists == 'false' }}
-        uses: thedoctor0/zip-release@master
-        with:
-          type: zip
-          directory: .
-          filename: ${{ env.zipFile }}
-          exclusions: ".git .github *.unitypackage *.zip"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "display_name=$DISPLAY_NAME" >> "$GITHUB_OUTPUT"
+          echo "safe_display_name=$SAFE_DISPLAY_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Build UnityPackage file list
-        if: ${{ steps.tagExists.outputs.exists == 'false' }}
+      - name: Generate release names
+        id: rel
+        shell: bash
         run: |
-          rm -f fileList
+          TAG="v${{ steps.pkg.outputs.version }}"
+          ZIP_FILE="${{ steps.pkg.outputs.safe_display_name }}-${{ steps.pkg.outputs.version }}.zip"
+          UNITYPACKAGE_FILE="${{ steps.pkg.outputs.safe_display_name }}-${{ steps.pkg.outputs.version }}.unitypackage"
 
-          find . -type f \
-            ! -path './.git/*' \
-            ! -path './.github/*' \
-            ! -name '*.zip' \
-            ! -name '*.unitypackage' \
-            ! -name 'fileList' \
-            ! -name 'metaList' \
-            > fileList
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          echo "unitypackage_file=$UNITYPACKAGE_FILE" >> "$GITHUB_OUTPUT"
 
-          echo "=== fileList ==="
-          cat fileList
+      - name: Check whether tag already exists
+        id: tagcheck
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.rel.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Create UnityPackage
-        if: ${{ steps.tagExists.outputs.exists == 'false' }}
+      - name: Stop if tag already exists
+        if: ${{ steps.tagcheck.outputs.exists == 'true' }}
+        shell: bash
+        run: |
+          echo "Tag already exists: ${{ steps.rel.outputs.tag }}"
+          exit 1
+
+      - name: Create source ZIP for UPM users
+        shell: bash
+        run: |
+          git archive \
+            --format=zip \
+            --output "${{ steps.rel.outputs.zip_file }}" \
+            HEAD
+
+      - name: Build unitypackage meta list
+        shell: bash
+        run: |
+          rm -f metaList
+
+          # Put the exact asset roots you want in the .unitypackage here.
+          # Add/remove lines to match your repo.
+          ROOTS=(
+            "./Editor"
+            "./Shaders"
+            "./MDMX Default.mat"
+          )
+
+          for path in "${ROOTS[@]}"; do
+            if [ -d "$path" ]; then
+              find "$path" -type f -name '*.meta' >> metaList
+            elif [ -f "$path.meta" ]; then
+              echo "$path.meta" >> metaList
+            elif [ -f "$path" ] && [[ "$path" == *.meta ]]; then
+              echo "$path" >> metaList
+            else
+              echo "Missing package root or meta: $path"
+              exit 1
+            fi
+          done
+
+          sort -u metaList -o metaList
+
+          echo "=== metaList ==="
+          cat metaList
+
+          test -s metaList
+
+      - name: Create unitypackage
         uses: pCYSl5EDgo/create-unitypackage@cfcd3cf0391a5ef1306342794866a9897c32af0b
         with:
-          package-path: ${{ env.unityPackage }}
-          include-files: fileList
+          package-path: ${{ steps.rel.outputs.unitypackage_file }}
+          include-files: metaList
 
-      - name: Check built files
-        if: ${{ steps.tagExists.outputs.exists == 'false' }}
+      - name: Verify artifacts
+        shell: bash
         run: |
-          echo "=== workspace files ==="
           ls -lah
-          echo "=== unitypackage exists? ==="
-          test -f "${{ env.unityPackage }}" && echo "yes" || (echo "no" && exit 1)
+          test -f "${{ steps.rel.outputs.zip_file }}"
+          test -f "${{ steps.rel.outputs.unitypackage_file }}"
 
-      - name: Read release template
-        id: template
-        if: ${{ steps.tagExists.outputs.exists == 'false' }}
-        uses: juliangruber/read-file-action@v1.1.6
-        with:
-          path: ${{ env.releaseTemplate }}
+      - name: Read release notes
+        id: notes
+        shell: bash
+        run: |
+          if [ -f "${{ env.RELEASE_TEMPLATE }}" ]; then
+            {
+              echo "content<<EOF"
+              cat "${{ env.RELEASE_TEMPLATE }}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "content<<EOF"
+              echo "Release ${{ steps.rel.outputs.tag }}"
+              echo
+              echo "UPM package: \`${{ steps.pkg.outputs.name }}\`"
+              echo "Version: \`${{ steps.pkg.outputs.version }}\`"
+              echo "Includes both UPM source ZIP and legacy .unitypackage."
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Create Release
-        if: ${{ steps.tagExists.outputs.exists == 'false' && github.event.inputs.dryRun != 'true' }}
+      - name: Create GitHub release
+        if: ${{ github.event.inputs.dryRun != 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.value }}
+          tag_name: ${{ steps.rel.outputs.tag }}
+          name: ${{ steps.pkg.outputs.display_name }} ${{ steps.pkg.outputs.version }}
+          generate_release_notes: false
+          body: ${{ steps.notes.outputs.content }}
           files: |
-            ${{ env.zipFile }}
-            ${{ env.unityPackage }}
+            ${{ steps.rel.outputs.zip_file }}
+            ${{ steps.rel.outputs.unitypackage_file }}
             package.json
-          body: ${{ steps.template.outputs.content }}
