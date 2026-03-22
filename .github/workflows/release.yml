@@ -77,20 +77,31 @@ jobs:
             --output "${{ steps.rel.outputs.zip_file }}" \
             HEAD
 
+      - name: Show repo tree
+        shell: bash
+        run: |
+          echo "=== repo root ==="
+          ls -lah
+          echo "=== files (depth 3) ==="
+          find . -maxdepth 3 -type f | sort
+
       - name: Build unitypackage meta list
         shell: bash
         run: |
           rm -f metaList
 
-          # Put the exact asset roots you want in the .unitypackage here.
-          # Add/remove lines to match your repo.
-          ROOTS=(
+          # Required roots for the unitypackage
+          REQUIRED_ROOTS=(
             "./Editor"
             "./Shaders"
+          )
+
+          # Optional roots/files for the unitypackage
+          OPTIONAL_ROOTS=(
             "./MDMX Default.mat"
           )
 
-          for path in "${ROOTS[@]}"; do
+          for path in "${REQUIRED_ROOTS[@]}"; do
             if [ -d "$path" ]; then
               find "$path" -type f -name '*.meta' >> metaList
             elif [ -f "$path.meta" ]; then
@@ -98,8 +109,20 @@ jobs:
             elif [ -f "$path" ] && [[ "$path" == *.meta ]]; then
               echo "$path" >> metaList
             else
-              echo "Missing package root or meta: $path"
+              echo "Missing required package root or meta: $path"
               exit 1
+            fi
+          done
+
+          for path in "${OPTIONAL_ROOTS[@]}"; do
+            if [ -d "$path" ]; then
+              find "$path" -type f -name '*.meta' >> metaList
+            elif [ -f "$path.meta" ]; then
+              echo "$path.meta" >> metaList
+            elif [ -f "$path" ] && [[ "$path" == *.meta ]]; then
+              echo "$path" >> metaList
+            else
+              echo "Skipping missing optional path: $path"
             fi
           done
 
@@ -138,9 +161,9 @@ jobs:
               echo "content<<EOF"
               echo "Release ${{ steps.rel.outputs.tag }}"
               echo
-              echo "UPM package: \`${{ steps.pkg.outputs.name }}\`"
+              echo "VCC package: \`${{ steps.pkg.outputs.name }}\`"
               echo "Version: \`${{ steps.pkg.outputs.version }}\`"
-              echo "Includes both UPM source ZIP and legacy .unitypackage."
+              echo "Includes both VCC source ZIP and legacy .unitypackage."
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           fi
